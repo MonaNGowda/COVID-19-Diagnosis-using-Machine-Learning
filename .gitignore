@@ -1,129 +1,854 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+#COVID-CNN-CODE
 
-# C extensions
-*.so
+import warnings
+warnings.filterwarnings('ignore')
+import numpy as np                     
+import matplotlib.pyplot as plt
+import os
+import cv2 as cv
+import random
+import torchvision
+import glob
+import time 
+import pickle
+import pandas as pd
+from pathlib import Path
+from PIL import Image
+from sklearn.model_selection import train_test_split
+from src.data import LungDataset, blend, Pad, Crop, Resize
+from src.models import UNet, PretrainedUNet
+from src.metrics import jaccard, dice
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import MinMaxScaler
+import h5py
+from pathlib import Path
+import json
+from os import listdir
+from sklearn.preprocessing import LabelBinarizer
+from keras.models import Sequential
+#from keras.layers.normalization import BatchNormalization
+from tensorflow.keras.layers import BatchNormalization
+from keras.layers.convolutional import Conv2D
+from keras.layers.convolutional import MaxPooling2D
+from keras.layers.core import Activation, Flatten, Dropout, Dense
+from keras import backend as K
+from keras.preprocessing.image import ImageDataGenerator
+#from keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam
+from keras.preprocessing import image
+from keras.preprocessing.image import img_to_array
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+from sklearn import metrics
+from sklearn.metrics import confusion_matrix
+import itertools
+from tensorflow.keras.datasets import cifar10
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten, Conv2D,MaxPool2D,Dropout
+from tensorflow.keras.losses import sparse_categorical_crossentropy
+from tensorflow.keras.optimizers import Adam
+from keras.layers import LeakyReLU
+print('done loading')
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+def folders_in_path(path): #takes path as input
+    if not Path.is_dir(path): #checks if path exsist
+        raise ValueError("argument is not directory") #produses error
+        #if not in directory
+    yield from filter(Path.is_dir,path.iterdir())
+def folders_in_depth(path,depth):
+    if 0>depth:
+        raise ValueError("depth smaller 0")
+    if 0==depth:
+        yield from folders_in_path(path)
+    else:
+        for folder in folders_in_path(path):
+            yield from folders_in_depth(folder,depth-1)
+def files_in_path(path):
+    if not Path.is_dir(path):
+        raise ValueError("argument is not a directory")
+    yield from filter(Path.is_file,path.iterdir())
+def sum_file_size(filepaths):
+    return sum([filep.stat().st_size for filep in filepaths])
+def convert_image_to_array(image_dir):
+    try:
+        image = cv.imread(image_dir)
+        if image is not None :
+            image = cv.resize(image, default_image_size)   
+            return img_to_array(image)
+        else :
+            return np.array([])
+    except Exception as e:
+        print(f"Error : {e}")
+        return None 
+  
+  import torch
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device
+models_folder = Path("models")
+ 
+ 
+ def load_train(path):
+    images = []
+    for label in labels:
+        direc = os.path.join(path, label)
+        class_num = labels.index(label)
+        for image in os.listdir(direc):
+            image_read = cv.imread(os.path.join(direc,image),cv.IMREAD_GRAYSCALE)
+            image_resized = cv.resize(image_read,(image_size,image_size))
+            images.append([image_resized,class_num])
+            
+    return np.array(images)
+ 
+ path = 'C:/Users/(Copy the path from your Desktop, where the dataset is stored)/'  
+type_data='COVID/' # Lung_Opacity\\,NORMAL\\,PNEUMONIA\\,Viral\\, Pneumonia\\,Tuberculosis\\
+# COVID-1.png
+# Lung_Opacity-1.png
+# IM-0115-0001.jpeg
+# TB (1).png
+subject=type_data+'COVID-1.png'
+ 
+ full_data=os.path.join(path,subject)
+print(full_data)
+image = cv.imread(full_data)
+plt.imshow(image,cmap="gray")
+plt.title('Raw Image')
+plt.show()
+  
+  # Extract histogram of image 
+plt.hist(image.ravel(), bins=256, range=(0.0, 1.0), fc='k', ec='k') #calculating histogram
+plt.hist(image.ravel(),256,[0,256]) 
+plt.title('Histogram of Raw image')
+plt.show()
+print('done')   
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+gray_image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+histogram_equalized = cv.equalizeHist(gray_image) 
+plt.imshow(histogram_equalized,cmap="gray")
+plt.title('Histogram Equalized image')
+plt.show()
+   
+   # Extract histogram of image 
+plt.hist(histogram_equalized.ravel(), bins=256, range=(0.0, 1.0), fc='k', ec='k') #calculating histogram
+plt.hist(histogram_equalized.ravel(),256,[0,256]) 
+plt.title('Histogram of Histogram equalized image')
+plt.show()
+ 
+ clahe = cv.createCLAHE(clipLimit =2) 
+final_img = clahe.apply(gray_image ) + 10
+plt.imshow(final_img,cmap="gray")
+plt.title('Contrast Limited Adaptive Histogram Equalization ')
+plt.show()
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
+batch_size = 4
+path_req=os.listdir('C:/Users/(Copy the path from your Desktop, where the dataset is stored)/') 
+mask_req=os.listdir('masks') 
+origins_list= [file for file in path_req]
 
-# Translations
-*.mo
-*.pot
+print(len(origins_list))
+  
+  masks_list= [file for file in mask_req ]
+print(len(masks_list))
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
 
-# Flask stuff:
-instance/
-.webassets-cache
+origin_mask_list = [(mask_name.replace("_mask", ""), mask_name) for mask_name in masks_list]
 
-# Scrapy stuff:
-.scrapy
+torch.cuda.empty_cache()
+unet = PretrainedUNet(
+    in_channels=1,
+    out_channels=2, 
+    batch_norm=True, 
+    upscale_mode="bilinear"
+)
+model_name = "unet-6v.pt"
+unet.load_state_dict(torch.load(models_folder / model_name, map_location=torch.device("cpu")))
+unet.to(device)
+unet.eval();
+device
 
-# Sphinx documentation
-docs/_build/
+origin = Image.open(full_data).convert("P")
+origin = torchvision.transforms.functional.resize(origin, (512, 512))
+origin = torchvision.transforms.functional.to_tensor(origin) - 0.5
 
-# PyBuilder
-target/
+with torch.no_grad():
+    origin = torch.stack([origin])
+    origin = origin.to(device)
+    out = unet(origin)
+    softmax = torch.nn.functional.log_softmax(out, dim=1)
+    out = torch.argmax(softmax, dim=1)
+    
+    origin = origin[0].to("cpu")
+    out = out[0].to("cpu")
 
-# Jupyter Notebook
-.ipynb_checkpoints
 
-# IPython
-profile_default/
-ipython_config.py
+pil_origin = torchvision.transforms.functional.to_pil_image(origin + 0.5).convert("RGB")
 
-# pyenv
-.python-version
+plt.imshow(out,cmap="gray")
+plt.title('Segmented region ')
+plt.show()
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+# TO DO : ONCE WITHOUT SEGMENTATION WE HAVE REACHED AROUND 50 -60  % efficency 
+# CREATE TRAINING DATA WITH SEGMENTED IMAGE 
+# 1. GET THE SEGMENTED REGION FROM THE ORIGINAL IMAGE , by simpling multiplyiong 
+# binary image of segmented with actual image USE THE SEMNETED IMAGE FOR  TRAINING
+# for Now to check ML model lets use the image directly and if we reach an efficency of around 40-50% we know that segmented result 
+# will produce a increased threshiold of 20-30% 
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
+train_path='train'
+EPOCHS = 100 #50
+INIT_LR = 1e-3
+BS = 32
+default_image_size = tuple((256, 256))
+image_size = 0
+width=256
+height=256
+depth=3
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+image_list, label_list = [], []
+train_labels=os.listdir(train_path) #take training path labels
+train_labels.sort() #sort the labels
+print(train_labels) #primt the lables
+global_features=[] #initialize variable to combine all features
+labels=[] #create label variables so as to decode text to number
+total=0 #initialize
+tot_file=[] #initialize
+count=1 #start count to check number of images
+i=0
+j=0
+k=0
+print(Path.cwd()) #gives the current path
 
-# SageMath parsed files
-*.sage.py
+for folder in folders_in_depth(Path.cwd(),1):
+        #first loop will pick the first foldend then next folder
+        files=list(files_in_path(folder)) #list all files in folder
+        file=len(files) #length of files
+        tot_file.append(file) #because we are running for all folder
+        # we are appending all files in tot_file at the end we
+        #shall get the list of number of files in the folder
+        #we are doing this because every folder has different number of files
+        #at the end when we are trainig all class of disease have to be
+        #trained equally, hence find the least number of images in the folder
+        #and then train accordingly
+        total_size=sum_file_size(files)
+        #total size of files
+        count=count+1 #check total number of files executed
+        print(f'{folder}:filecount:{len(files)},total size:{total_size}')
+        
+        tot_file.sort() #sort files based on ascending order
+num=2690#tot_file[2] #Index 0 is junkhence extract index 1
+print('tOTAL FILE:',tot_file)
+print(num) 
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+images_per_class=num #consider number of images per class
+#%%START WITH TRAINING
+#for tr_name in range(0,2):
+count=0   
 
-# Spyder project settings
-.spyderproject
-.spyproject
+train_path+'\\'+train_labels[1]
 
-# Rope project settings
-.ropeproject
+for count in range(0,len(train_labels)):
+   
+    tr_name=count
+    
+    dir=train_path+'\\'+train_labels[tr_name]
+    current_label=train_labels[tr_name]
+    print("[STATUS] processed folder: {}".format(current_label))
+    k=1
+    file_sub_folder=os.listdir(dir) 
+    for x in range(0,images_per_class):
+        file=os.getcwd()+'\\'+dir +'\\'+ file_sub_folder[x]
+            
+        image_list.append(convert_image_to_array(file ))
+        label_list.append(current_label) 
+        i+=1
+        k+=1    
+        count=count+1
+print("[STATUS] training labels{}".format(np.array(label_list).shape))
 
-# mkdocs documentation
-/site
+image_size = len(image_list)
+print(image_size)
+label_binarizer = LabelBinarizer()
+image_labels = label_binarizer.fit_transform(label_list)
+pickle.dump(label_binarizer,open('label_transform.pkl', 'wb'))
+n_classes = len(label_binarizer.classes_)
+print(label_binarizer.classes_)
+print(n_classes)
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+print(len(image_list))
 
-# Pyre type checker
-.pyre/
+np_image_list = np.array(image_list, dtype=np.float16) / 225.0
+print("[INFO] Spliting data to train, test")
+x_train, x_test, y_train, y_test = train_test_split(np_image_list, image_labels, test_size=0.2, random_state = 42) 
+
+aug = ImageDataGenerator(
+rotation_range=25, width_shift_range=0.1,
+height_shift_range=0.1, shear_range=0.2, 
+zoom_range=0.2,horizontal_flip=True, 
+fill_mode="nearest")
+model1 = Sequential()
+inputShape = (height, width, depth)
+chanDim = -1
+if K.image_data_format() == "channels_first":
+    inputShape = (depth, height, width)
+    chanDim = 1
+
+model1.add(Conv2D(16,(3, 3), padding="same",input_shape=inputShape))
+model1.add(Activation("relu"))
+model1.add(BatchNormalization(axis=chanDim))
+model1.add(MaxPooling2D(pool_size=(3, 3)))
+model1.add(Dropout(0.25))        
+model1.add(Conv2D(16,(3, 3), padding="same",input_shape=inputShape))
+model1.add(Activation("relu"))
+model1.add(BatchNormalization(axis=chanDim))
+model1.add(MaxPooling2D(pool_size=(3, 3)))
+model1.add(Dropout(0.25))    
+model1.add(Conv2D(32,(3, 3), padding="same",input_shape=inputShape))
+model1.add(Activation("relu"))
+model1.add(BatchNormalization(axis=chanDim))
+model1.add(MaxPooling2D(pool_size=(3, 3)))
+model1.add(Dropout(0.25))
+model1.add(Conv2D(64, (3, 3), padding="same"))
+model1.add(Activation("relu"))
+model1.add(BatchNormalization(axis=chanDim))
+model1.add(Conv2D(64, (3, 3), padding="same"))
+model1.add(Activation("relu"))
+model1.add(BatchNormalization(axis=chanDim))
+model1.add(MaxPooling2D(pool_size=(2, 2)))
+model1.add(Dropout(0.25))
+model1.add(Conv2D(128, (3, 3), padding="same"))
+model1.add(Activation("relu"))
+model1.add(BatchNormalization(axis=chanDim))
+model1.add(Conv2D(128, (3, 3), padding="same"))
+model1.add(Activation("relu"))
+model1.add(BatchNormalization(axis=chanDim))
+model1.add(MaxPooling2D(pool_size=(2, 2)))
+model1.add(Dropout(0.25))
+model1.add(Flatten())
+model1.add(Dense(1024))
+model1.add(Activation("relu"))
+model1.add(BatchNormalization())
+model1.add(Dropout(0.5))
+model1.add(Dense(n_classes))
+model1.add(Activation("softmax"))
+model1.summary()
+opt = Adam(lr=INIT_LR, decay=INIT_LR / EPOCHS)
+# distribution
+model1.compile(loss="binary_crossentropy", optimizer=opt,metrics=["accuracy"])
+# train the network
+
+print("training network...")
+history = model1.fit_generator(
+      aug.flow(x_train, y_train, batch_size=BS),
+      validation_data=(x_test, y_test),
+      steps_per_epoch=len(x_train) // BS,
+      epochs=EPOCHS, verbose=1
+      )
+   
+print("Saving model...")
+# pickle.dump(model,open('cnn_model.pkl', 'wb'))
+
+print(x_test[0].shape)
+
+from sklearn import metrics
+pred=np.round(model1.predict(x_test))
+chest_xray=['COVID/',  'NORMAL/', 'PNEUMONIA/', 'Tuberculosis/', 'Viral Pneumonia/']
+metrics=metrics.classification_report(y_test,pred,target_names=chest_xray)
+print(metrics)
+
+def plot_confusion_matrix(cm, classes,normalize=False,title='Confusion matrix',cmap=plt.cm.Blues):
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+    fmt ='.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt), horizontalalignment="center", color="white" if cm[i, j] > thresh else "black")
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label') 
+    
+    from sklearn.metrics import confusion_matrix
+test_labels = pd.DataFrame(y_test).idxmax(axis=1)
+predictions = pd.DataFrame(pred).idxmax(axis=1)
+confusion_matrix= confusion_matrix(test_labels, predictions)
+plot_confusion_matrix(confusion_matrix,['COVID', 'NORMAL', 'PNEUMONIA', 'Tuberculosis', 'Viral Pneumonia'],normalize=True)
+
+from sklearn.metrics import accuracy_score
+accuracy=accuracy_score(test_labels, predictions)
+print('Accuracy:',accuracy*100)
+
+print('Test on the data :',full_data)
+
+test_image = cv.resize(cv.imread(full_data),  (256,256))
+test_image = np.array(test_image).reshape( 1,256, 256, -1)
+pred=model1.predict(test_image)
+pos,val=np.where(pred==1)
+print(pred)
+chest_xray[int(val)]  
+
+plt.subplot(1, 2, 1)
+plt.title("origin image")
+plt.imshow(np.array(pil_origin))
+
+plt.subplot(1, 2, 2)
+plt.title(chest_xray[int(val)]  )
+plt.imshow(np.array(blend(origin, out))); 
+
+
+
+
+
+
+
+
+
+
+#COVID-19_GCN_Code
+
+import warnings
+warnings.filterwarnings('ignore')
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import cv2 as cv
+import random
+import glob
+import time
+import pickle
+import pandas as pd
+import graph
+from pathlib import Path
+
+
+from keras.preprocessing.image import img_to_array
+import tensorflow as tf
+import keras.backend as K
+from keras.layers import Input, Dense, Flatten
+from keras.models import Model
+from keras.callbacks import EarlyStopping
+from keras.regularizers import l2
+import networkx as nx
+import scipy.sparse as sp
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split
+
+from tensorflow.keras.optimizers import Adam
+
+from keras.layers import MaxPooling2D, Reshape
+import seaborn as sns
+from sklearn import metrics
+from utilities import generate_graph,create_graph  
+from spektral.datasets import mnist
+from spektral.utils import label_to_one_hot, normalized_laplacian
+
+from spektral.utils import Batch, batch_iterator
+from spektral.layers import GraphConv, ChebConv
+from spektral.utils import localpooling_filter
+from spektral.layers import GraphConv, GlobalAvgPool, EdgeConditionedConv
+from spektral.layers.ops import sp_matrix_to_sp_tensor
+print('done loading')
+
+train_path = 'C:/Users/(Copy the path from your Desktop, where the dataset is stored)' 
+# Parameters
+user_reguralization_rate = 5e-4         
+user_model_learning_rate = 0.03  
+user_model_batch = 2    
+epochs = 1    
+print(train_path)                                                                        
+
+# folder preprocessing 
+def check_folder_path(path):   
+    if not Path.is_dir(path):   
+        raise ValueError("argument is not directory")   
+       
+    yield from filter(Path.is_dir, path.iterdir())
+
+
+def check_depth(path, depth):
+    if 0 > depth:
+        raise ValueError("depth smaller 0")
+    if 0 == depth:
+        yield from check_folder_path(path)
+    else:
+        for folder in check_folder_path(path):
+            yield from check_depth(folder, depth - 1)
+
+
+def check_files(path):
+    if not Path.is_dir(path):
+        raise ValueError("argument is not a directory")
+    yield from filter(Path.is_file, path.iterdir())
+
+
+def sum_file_size(filepaths):
+    return sum([filep.stat().st_size for filep in filepaths])
+
+
+def convert_image_to_array(image_dir):
+    try:
+        image = cv.imread(image_dir)
+
+        if image is not None:
+
+            image1 = cv.resize(image, default_image_size)
+            gray = cv.cvtColor(image1, cv.COLOR_BGR2GRAY)
+
+            return img_to_array(gray).flatten()
+        else:
+            return np.array([])
+    except Exception as e:
+        print(f"Error : {e}")
+        return None
+
+                   
+                   image_list, label_list = [], []
+train_labels = os.listdir(train_path)  # take training path labels
+num_labels=len(train_labels)
+print(num_labels)
+train_labels.sort()  # sort the labels
+print(train_labels)  # primt the lables
+labels = []  # create label variables so as to decode text to number
+total = 0  # initialize
+tot_file = []  # initialize
+count = 1  # start count to check number of images
+i = 0
+j = 0
+k = 0
+ 
+num = 1000 # Index 0 is junkhence extract index 1
+print(num)
+
+images_per_class = num # consider number of images per class
+# %%START WITH TRAINING
+# for tr_name in range(0,2):
+count = 0
+default_image_size = tuple((28, 28))
+
+for count in range(0, len(train_labels)):
+
+    tr_name = count
+
+    dir = train_path + '/' + train_labels[tr_name]
+    print(dir)
+    current_label = train_labels[tr_name]
+    print("[STATUS] processed folder: {}".format(current_label))
+    k = 1
+    file_sub_folder = os.listdir(dir)
+    for x in range(0, images_per_class):
+        file = dir + '/' + file_sub_folder[x]
+        
+         
+        image_list.append(convert_image_to_array(file))
+        label_list.append(current_label)
+        i += 1
+        k += 1
+        count = count + 1
+print("[STATUS] training labels{}".format(np.array(label_list).shape))
+labelEncoder = LabelEncoder()
+image_size = len(image_list)
+image_labels = labelEncoder.fit_transform(label_list)
+
+np_image_list = np.array(image_list, dtype=np.float32) / 225.0
+print("[INFO] Spliting data to train, test")
+X_train, X_test, y_train, y_test = train_test_split(np_image_list, image_labels, test_size=0.2, random_state=42)
+X_val = X_test
+y_val = y_test
+
+gen_random_seed = 2000
+os.environ['PYTHONHASHSEED']=str(gen_random_seed)
+random.seed(gen_random_seed)
+np.random.seed(gen_random_seed)
+tf.compat.v1.random.set_random_seed(gen_random_seed)
+session_conf = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
+sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph(), config=session_conf)
+K.set_session(sess)
+                                                                                   
+X_train, X_val, X_test = X_train[..., None], X_val[..., None], X_test[..., None]
+N = X_train.shape[-2]      # Number of nodes in the graphs
+F = X_train.shape[-1]      # Node features dimensionality
+n_out = 10  # Dimension of the target
+print(X_train.shape, y_train.shape)
+print(X_val.shape, y_val.shape)
+print(X_test.shape, y_test.shape)     
+
+A = generate_graph(28,6)
+plt.imshow(A.todense())
+fig, ax = plt.subplots(figsize=(8, 8))
+ax = create_graph(A, ax=ax, size_factor=1)
+ax = create_graph(A, ax=ax, size_factor=1, spring_layout=True)
+fig, axes = plt.subplots(figsize=(20, 5), ncols=4)
+axes[2].imshow(A.todense())
+ 
+# degree matrix D
+D = A.sum(axis=0).reshape(28, 28)
+axes[3].imshow(D)
+ 
+axes[0] = create_graph(A, ax=axes[0], size_factor=1)
+axes[1] = create_graph(A, ax=axes[1], size_factor=1, spring_layout=True)
+fig.tight_layout()
+
+threshold = 0.25  # to reduce the noise for averaged signals
+# threshold = 0.5
+d_disease_graphs = {}  # to collect feature graphs from each class
+                                                                                     
+for i in range(num_labels):
+    mask = y_train == i
+    fig, axes = plt.subplots(figsize=(20, 5), ncols=4)
+    x_train_i_avg = X_train[mask].mean(axis=0).flatten()
+    axes[0].imshow(x_train_i_avg.reshape(28, 28),cmap='gray')
+    # threshold the averages of pixels
+    x_train_i_avg[x_train_i_avg < threshold] = 0
+    axes[1].imshow(x_train_i_avg.reshape(28, 28))
+    # a sparse diag matrix with the intensities values on the diagnoal
+    A_diag_i = sp.diags(x_train_i_avg, dtype=np.float32).tolil()
+    A_i = A.dot(A_diag_i)
+    d_disease_graphs[i] = A_i
+    axes[2] = create_graph(A_i, ax=axes[2], size_factor=1)
+    axes[3] = create_graph(A_i, ax=axes[3], size_factor=1, spring_layout=True)
+    fig.tight_layout()
+    plt.show()
+
+                                                                                        
+                                                                                        
+ def gcn_model_with_layer(A):
+    nodes=28 * 28  # number of nodes 
+    dimension=1 # feature dimesnion
+    n_out=10
+    requlizer_kernel=5e-4 
+    pooling_filter = localpooling_filter(A)
+    input_data = Input(shape=(nodes, dimension))  
+    pooling_data = Input(tensor=sp_matrix_to_sp_tensor(pooling_filter))
+    conv_data = GraphConv(10,activation='relu',kernel_regularizer=l2(requlizer_kernel),use_bias=True)([input_data, pooling_data])
+    fc = Flatten()(conv_data)
+    output = Dense(n_out, activation='softmax')(fc)
+    model = Model(inputs=[input_data, pooling_data], outputs=output)
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+def graph_convolution_network(input_data,kernel_activator='relu',optimizer='adam',loss_function='sparse_categorical_crossentropy'):
+    m=28
+    n=28
+    p=32
+    size=2
+    total_node=28 * 28
+    dimension=1
+    dense_out=10
+    format_data = Input(shape=(total_node, dimension))
+ 
+    tensor_data = Input(tensor=sp_matrix_to_sp_tensor(localpooling_filter(input_data)))
+    graph_conv_layer = GraphConv(32,
+                           activation=kernel_activator,
+                           kernel_regularizer=l2(5e-4),
+                           use_bias=True)([format_data, tensor_data])
+    graph_conv_layer = GraphConv(32,
+                           activation=kernel_activator,
+                           kernel_regularizer=l2(5e-4),
+                           use_bias=True)([graph_conv_layer, tensor_data])
+    
+    rs = Reshape((m, n, p))(graph_conv_layer)
+    pooled = MaxPooling2D(pool_size=(size, size))(rs)
+    flatten = Flatten()(pooled)
+    fc = Dense(512, activation='relu')(flatten)
+    output = Dense(dense_out, activation='softmax')(fc)
+    # Build model
+    model = Model(inputs=[format_data, tensor_data], outputs=output)
+    model.compile(optimizer, loss_function, metrics=['accuracy'])
+    
+    return model
+                                                                   
+    # --------------graph_convolution_one_layer_model-----------
+print("=========== -graph_convolution_one_layer_model- ============")
+test_scores = []
+model_full_grid = gcn_model_with_layer(A)
+model_full_grid.summary()
+validation_data = (X_val, y_val)
+model_full_grid.fit(X_train,
+                    y_train,
+                    batch_size=user_model_batch,
+                    validation_data=validation_data,
+                    epochs=epochs)
+print('Evaluating model.')
+eval_results = model_full_grid.evaluate(X_test,
+                              y_test,
+                              batch_size=user_model_batch)
+print('loss:{}\n' 
+      'acc: {}'.format(*eval_results))
+
+test_scores.append({
+    'model': 'graph_convolution_one_layer_model',
+    'accuracy': eval_results[1]
+})
+                                                                                     
+                                                                                     
+# --------------graph_convolution_multi_layer_model-----------
+print("=========== -graph_convolution_multi_layer_model- ============")
+test_scores = []
+model_full_grid = graph_convolution_network(A)
+model_full_grid.summary()
+validation_data = (X_val, y_val)
+model_full_grid.fit(X_train,
+                    y_train,
+                    batch_size=user_model_batch,
+                    validation_data=validation_data,
+                    epochs=epochs)
+print('Evaluating model.')
+eval_results = model_full_grid.evaluate(X_test,
+                              y_test,
+                              batch_size=user_model_batch)
+print('loss:{}\n' 
+      'acc: {}'.format(*eval_results))
+
+test_scores.append({
+    'model': 'graph_convolution_multi_layer_model',
+    'accuracy': eval_results[1]
+})
+
+A0 = sp.csr_matrix(A.shape, dtype=np.float32)
+print(A0.shape, A0.nnz)
+model_no_graph = gcn_model_with_layer(A0)
+model_no_graph.summary()
+model_no_graph.fit(X_train,
+                    y_train,
+                    batch_size=user_model_batch,
+                    validation_data=validation_data,
+                    epochs=epochs)
+print('Evaluating model.')
+eval_results = model_no_graph.evaluate(X_test,
+                              y_test,
+                              batch_size=user_model_batch)
+print('loss: {}\n'
+      'acc: {}'.format(*eval_results))
+
+test_scores.append({
+    'model': 'GCN graph',
+    'accuracy': eval_results[1]
+})
+
+
+def fc_model(N=28 * 28, F=1,
+             n_out=10,
+             l2_reg=user_reguralization_rate,
+             learning_rate=user_model_learning_rate):
+    '''-connected model classification.
+    '''
+    X_in = Input(shape=(N, F))
+
+    fc = Dense(10, activation='relu',
+               kernel_regularizer=l2(l2_reg),
+               use_bias=True)(Flatten()(X_in))
+
+    output = Dense(n_out, activation='softmax')(fc)
+
+    # Build model
+    model = Model(inputs=X_in, outputs=output)
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+    return model
+
+model_fc = fc_model()
+model_fc.summary()
+model_fc.fit(X_train,
+                    y_train,
+                    batch_size=user_model_batch,
+                    validation_data=validation_data,
+                    epochs=epochs)
+
+
+# Evaluate model
+print('Evaluating model.')
+eval_results = model_fc.evaluate(X_test,
+                              y_test,
+                              batch_size=user_model_batch)
+print('Done.\n'
+      'Test loss: {}\n'
+      'Test acc: {}'.format(*eval_results))
+
+test_scores.append({
+    'model': 'connected model',
+    'accuracy': eval_results[1]
+})
+
+d_disease_models = {}
+for disease in range(num_labels):
+    model_i = gcn_model_with_layer(d_disease_graphs[disease])
+    print(disease, d_disease_graphs[disease].nnz)
+
+    # Train model with disease feature graph
+    model_i.fit(X_train,
+                        y_train,
+                        batch_size=user_model_batch,
+                        validation_data=validation_data,
+                        epochs=epochs)
+    
+    d_disease_models[disease] = model_i
+    
+    
+    for disease, model_i in d_disease_models.items():
+    eval_results = model_i.evaluate(X_test,
+                                  y_test,
+                                  batch_size=user_model_batch)
+    print('disease %s' % train_labels[disease])
+    print('Test loss: {}\n'
+          'Test acc: {}'.format(*eval_results))
+    
+    test_scores.append({
+        'model': 'GCN trimmed ',
+        'disease': disease,
+        'accuracy': eval_results[1]
+    })    
+    
+    def plot_confusion_matrix(cm, classes=list(range(num_labels))):
+    cm_df = pd.DataFrame(cm, index=classes, columns=classes)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax = sns.heatmap(cm_df,
+                     fmt='.3f',
+                     annot=True, cmap='Reds', ax=ax)
+    ax.set_ylabel('True label')
+    ax.set_xlabel('Predicted label')
+    fig.tight_layout()
+    return fig
+y_test_preds = model_full_grid.predict(X_test)
+print(y_test_preds.shape)
+cm = metrics.confusion_matrix(y_test, np.argmax(y_test_preds, axis=1))
+fig = plot_confusion_matrix(cm/cm.sum(axis=1))
+fig.get_axes()[0].set_title('GCN');
+for i in range(0,num_labels):
+    print("Image mapping  {} : {} ".format(i,train_labels[i])) 
+
+
+y_test_preds = model_no_graph.predict(X_test)
+print(y_test_preds.shape)
+cm = metrics.confusion_matrix(y_test, np.argmax(y_test_preds, axis=1))
+fig = plot_confusion_matrix(cm/cm.sum(axis=1))
+fig.get_axes()[0].set_title('No graph');
+for i in range(0,num_labels):
+    print("Image mapping  {} : {} ".format(i,train_labels[i]))
+    
+    acc_df = {}
+for model_name, model in d_disease_models.items():
+    
+    y_test_preds = model.predict(X_test)
+    cm = metrics.confusion_matrix(y_test, np.argmax(y_test_preds, axis=1))
+    
+  
+    acc_per_classes = np.diag(cm/cm.sum(axis=1))
+
+    
+    acc_df[model_name] = acc_per_classes
+    
+    
+    y_test_preds = model_full_grid.predict(X_test)
+cm = metrics.confusion_matrix(y_test, np.argmax(y_test_preds, axis=1))
+acc_per_class_full_model = np.diag(cm/cm.sum(axis=1))
+acc_per_class_full_model
+for i in range(0,num_labels):
+    print("Efficency : {} :{} ".format(train_labels[i],acc_per_class_full_model[i]))
